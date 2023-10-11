@@ -1,5 +1,6 @@
 commands
  ```bash
+    minikube start driver=docker
     python3.9 -m venv myenv
     source myenv/bin/activate
     cd data-engineering
@@ -10,8 +11,9 @@ commands
     kubectl get svc
     kubectl apply -f mysql-service.yaml
     kubectl apply -f kafka-service.yaml
-    docker build -t mlops-stock/mysql_creation:latest
-    docker push mlops-stock/mysql_creation:latest
+    docker build -t ariq913/stock_mysql_creation:latest .
+    docker push ariq913/stock_mysql_creation:latest
     kubectl delete service mysql-service
+    kubectl apply -f create-db.yaml
 kubectl delete service kafka-service
     ```
