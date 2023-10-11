@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+spec:
+  ports:
+  - port: 9092
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:latest
+        env:
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: INSIDE://:9092
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: INSIDE:PLAINTEXT
+        - name: KAFKA_LISTENERS
+          value: INSIDE://0.0.0.0:9092
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: INSIDE
+        ports:
+        - containerPort: 9092
