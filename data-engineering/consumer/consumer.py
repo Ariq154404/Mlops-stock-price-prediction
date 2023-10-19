@@ -56,11 +56,11 @@ def callback(ch, method, properties, body):
         VALUES (%s, %s) 
         ON DUPLICATE KEY UPDATE stock_price = %s
     """, (stock_date, stock_price, stock_price))
-    cursor.execute("SELECT * FROM stock_table ORDER BY stock_date DESC LIMIT 2")
-    top_10_records = cursor.fetchall()
-    print("\nTop 10 latest records:")
-    for record in top_10_records:
-        print(record)
+    # cursor.execute("SELECT * FROM stock_table ORDER BY stock_date DESC LIMIT 2")
+    # top_10_records = cursor.fetchall()
+    # print("\nTop 10 latest records:")
+    # for record in top_10_records:
+    #     print(record)
     conn.commit()
 
 channel.basic_consume(queue='stock-queue', on_message_callback=callback, auto_ack=True)

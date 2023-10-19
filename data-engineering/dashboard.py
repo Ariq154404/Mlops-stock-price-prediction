@@ -1,0 +1,91 @@
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+import mysql.connector
+import time
+
+# Streamlit configuration
+st.set_page_config(
+    page_title="Live Stock Prices Dashboard",
+    page_icon="📈",
+    layout="wide",
+)
+
+# Database configuration
+MYSQL_HOST = "localhost"
+MYSQL_USER = "root"
+MYSQL_PORT = 3307
+MYSQL_PASSWORD = "my-secret-pw"
+MYSQL_DATABASE = "stocks"
+
+# Connect to MySQL and fetch stock data
+def get_data():
+    conn = mysql.connector.connect(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DATABASE
+    )
+    query = "SELECT * FROM stock_table ORDER BY stock_date DESC"
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
+
+# App title
+st.title("Live Stock Prices Dashboard")
+
+# Set up placeholders for dynamically updating content
+kpi_placeholder = st.empty()
+chart_placeholder1 = st.empty()
+chart_placeholder2 = st.empty()
+data_placeholder = st.empty()
+
+while True:
+    # Fetch data
+    df = get_data()
+
+    # Calculate KPIs
+    avg_price = df["stock_price"].mean()
+    last_price = df["stock_price"].iloc[0]
+    oldest_price = df["stock_price"].iloc[-1]
+    price_change = last_price - oldest_price
+
+    # KPIs Display
+    with kpi_placeholder.container():
+        kpi1, kpi2, kpi3 = st.columns(3)
+
+        kpi1.metric(
+            label="Average Stock Price 📊",
+            value=f"${round(avg_price, 2)}"
+        )
+
+        kpi2.metric(
+            label="Latest Stock Price 📈",
+            value=f"${round(last_price, 2)}"
+        )
+
+        kpi3.metric(
+            label="Price Change 💹",
+            value=f"${round(price_change, 2)}",
+            delta=round(price_change, 2)
+        )
+
+    # Plotting
+    with chart_placeholder1.container():
+        st.markdown("### Stock Price Over Time")
+        fig = px.line(df, x='stock_date', y='stock_price', title='Stock Price Trend')
+        st.write(fig)
+
+    with chart_placeholder2.container():
+        st.markdown("### Price Distribution")
+        fig2 = px.histogram(df, x='stock_price', title='Price Distribution')
+        st.write(fig2)
+
+    # Display data
+    with data_placeholder.container():
+        st.markdown("### Stock Data")
+        st.dataframe(df)
+    
+    # Wait for a specific time interval before updating data
+    time.sleep(10)  # Update every 10 seconds
