@@ -26,9 +26,6 @@
 #ifdef ARROW_CSV
 #include "arrow/dataset/file_csv.h"
 #endif
-#ifdef ARROW_JSON
-#include "arrow/dataset/file_json.h"
-#endif
 #include "arrow/dataset/file_ipc.h"
 #ifdef ARROW_ORC
 #include "arrow/dataset/file_orc.h"

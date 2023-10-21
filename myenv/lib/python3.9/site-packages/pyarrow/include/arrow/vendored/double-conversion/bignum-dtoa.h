@@ -30,7 +30,6 @@
 
 #include "utils.h"
 
-namespace arrow_vendored {
 namespace double_conversion {
 
 enum BignumDtoaMode {
@@ -81,6 +80,5 @@ void BignumDtoa(double v, BignumDtoaMode mode, int requested_digits,
                 Vector<char> buffer, int* length, int* point);
 
 }  // namespace double_conversion
-}  // namespace arrow_vendored
 
 #endif  // DOUBLE_CONVERSION_BIGNUM_DTOA_H_

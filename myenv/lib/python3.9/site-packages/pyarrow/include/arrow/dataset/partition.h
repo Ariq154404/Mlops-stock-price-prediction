@@ -187,8 +187,6 @@ class ARROW_DS_EXPORT KeyValuePartitioning : public Partitioning {
 
   const ArrayVector& dictionaries() const { return dictionaries_; }
 
-  SegmentEncoding segment_encoding() const { return options_.segment_encoding; }
-
   bool Equals(const Partitioning& other) const override;
 
  protected:

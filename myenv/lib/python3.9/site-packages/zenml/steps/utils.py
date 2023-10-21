@@ -1,0 +1,382 @@
+#  Copyright (c) ZenML GmbH 2021. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at:
+#
+#       https://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+#  or implied. See the License for the specific language governing
+#  permissions and limitations under the License.
+
+"""Utility functions and classes to run ZenML steps."""
+
+import ast
+import inspect
+import textwrap
+from typing import Any, Callable, Dict, Optional, Tuple, Union
+
+import pydantic.typing as pydantic_typing
+from pydantic import BaseModel
+from typing_extensions import Annotated
+
+from zenml.logger import get_logger
+from zenml.model.artifact_config import ArtifactConfig
+from zenml.steps.step_output import Output
+from zenml.utils import source_code_utils
+
+logger = get_logger(__name__)
+
+SINGLE_RETURN_OUT_NAME = "output"
+
+
+class OutputSignature(BaseModel):
+    """The signature of an output artifact."""
+
+    resolved_annotation: Any
+    artifact_config: Optional[ArtifactConfig]
+
+
+def get_args(obj: Any) -> Tuple[Any, ...]:
+    """Get arguments of a type annotation.
+
+    Example:
+        `get_args(Union[int, str]) == (int, str)`
+
+    Args:
+        obj: The annotation.
+
+    Returns:
+        The args of the annotation.
+    """
+    return tuple(
+        pydantic_typing.get_origin(v) or v
+        for v in pydantic_typing.get_args(obj)
+    )
+
+
+def parse_return_type_annotations(
+    func: Callable[..., Any], enforce_type_annotations: bool = False
+) -> Dict[str, OutputSignature]:
+    """Parse the return type annotation of a step function.
+
+    Args:
+        func: The step function.
+        enforce_type_annotations: If `True`, raises an exception if a type
+            annotation is missing.
+
+    Raises:
+        RuntimeError: If the output annotation has variable length or contains
+            duplicate output names.
+        RuntimeError: If type annotations should be enforced and a type
+            annotation is missing.
+
+    Returns:
+        The function output artifacts.
+    """
+    signature = inspect.signature(func, follow_wrapped=True)
+    return_annotation = signature.return_annotation
+
+    if return_annotation is None:
+        return {}
+
+    if return_annotation is signature.empty:
+        if enforce_type_annotations:
+            raise RuntimeError(
+                "Missing return type annotation for step function "
+                f"'{func.__name__}'."
+            )
+        elif has_only_none_returns(func):
+            return {}
+        else:
+            return_annotation = Any
+
+    if isinstance(return_annotation, Output):
+        logger.warning(
+            "Using the `Output` class to define the outputs of your steps is "
+            "deprecated. You should instead use the standard Python way of "
+            "type annotating your functions. Check out our documentation "
+            "https://docs.zenml.io/user-guide/advanced-guide/pipelining-features/configure-steps-pipelines#step-output-names "
+            "for more information on how to assign custom names to your step "
+            "outputs."
+        )
+        return {
+            output_name: OutputSignature(
+                resolved_annotation=resolve_type_annotation(output_type),
+                artifact_config=None,
+            )
+            for output_name, output_type in return_annotation.items()
+        }
+
+    elif pydantic_typing.get_origin(return_annotation) is tuple:
+        requires_multiple_artifacts = has_tuple_return(func)
+
+        if requires_multiple_artifacts:
+            output_signature = {}
+
+            args = pydantic_typing.get_args(return_annotation)
+            if args[-1] is Ellipsis:
+                raise RuntimeError(
+                    "Variable length output annotations are not allowed."
+                )
+
+            for i, annotation in enumerate(args):
+                resolved_annotation = resolve_type_annotation(annotation)
+                (
+                    output_name,
+                    artifact_config,
+                ) = get_output_name_from_annotation_metadata(annotation)
+                output_name = output_name or f"output_{i}"
+                if output_name in output_signature:
+                    raise RuntimeError(f"Duplicate output name {output_name}.")
+
+                output_signature[output_name] = OutputSignature(
+                    resolved_annotation=resolved_annotation,
+                    artifact_config=artifact_config,
+                )
+
+            return output_signature
+
+    resolved_annotation = resolve_type_annotation(return_annotation)
+    output_name, artifact_config = get_output_name_from_annotation_metadata(
+        return_annotation
+    )
+    output_name = output_name or SINGLE_RETURN_OUT_NAME
+
+    output_signature = {
+        output_name: OutputSignature(
+            resolved_annotation=resolved_annotation,
+            artifact_config=artifact_config,
+        )
+    }
+
+    return output_signature
+
+
+def resolve_type_annotation(obj: Any) -> Any:
+    """Returns the non-generic class for generic aliases of the typing module.
+
+    Example: if the input object is `typing.Dict`, this method will return the
+    concrete class `dict`.
+
+    Args:
+        obj: The object to resolve.
+
+    Returns:
+        The non-generic class for generic aliases of the typing module.
+    """
+    origin = pydantic_typing.get_origin(obj) or obj
+
+    if origin is Annotated:
+        annotation, *_ = pydantic_typing.get_args(obj)
+        return resolve_type_annotation(annotation)
+    elif pydantic_typing.is_union(origin):
+        return obj
+
+    return origin
+
+
+def get_output_name_from_annotation_metadata(
+    annotation: Any,
+) -> Tuple[Optional[str], Optional[ArtifactConfig]]:
+    """Get the output name from a type annotation.
+
+    Example:
+    ```python
+    get_output_name_from_annotation_metadata(int)  # None, None
+    get_output_name_from_annotation_metadata(Annotated[int, "name"]  # name, None
+    get_output_name_from_annotation_metadata(Annotated[int, "name", ArtifactConfig(model_name="foo")]  # name, ArtifactConfig(model_name="foo")
+    ```
+
+    Args:
+        annotation: The type annotation.
+
+    Raises:
+        ValueError: If the annotation not following (str,ArtifactConfig) pattern
+
+    Returns:
+        Tuple of output_name and artifact_config.
+    """
+    if (pydantic_typing.get_origin(annotation) or annotation) is not Annotated:
+        return None, None
+
+    annotation, *metadata = pydantic_typing.get_args(annotation)
+
+    msg = ""
+    if len(metadata) > 2:
+        msg += "Annotation metadata can contain not more than 2 elements: the output name and the instance of `ArtifactConfig`.\n"
+
+    output_name = None
+    artifact_config = None
+    for metadata_instance in metadata:
+        if isinstance(metadata_instance, str):
+            if output_name is None:
+                output_name = metadata_instance
+            else:
+                msg += "Annotation metadata can not contain multiple output names.\n"
+        elif isinstance(metadata_instance, ArtifactConfig):
+            if artifact_config is None:
+                artifact_config = metadata_instance
+            else:
+                msg += "Annotation metadata can not contain multiple `ArtifactConfig` instances.\n"
+        else:
+            msg += "Annotation metadata can only contain `str` and `ArtifactConfig` instances.\n"
+
+    if msg:
+        raise ValueError(msg)
+
+    return output_name, artifact_config
+
+
+class ReturnVisitor(ast.NodeVisitor):
+    """AST visitor class that can be subclassed to visit function returns."""
+
+    def __init__(self, ignore_nested_functions: bool = True) -> None:
+        """Initializes a return visitor instance.
+
+        Args:
+            ignore_nested_functions: If `True`, will skip visiting nested
+                functions.
+        """
+        self._ignore_nested_functions = ignore_nested_functions
+        self._inside_function = False
+
+    def _visit_function(
+        self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]
+    ) -> None:
+        """Visit a (async) function definition node.
+
+        Args:
+            node: The node to visit.
+        """
+        if self._ignore_nested_functions and self._inside_function:
+            # We're already inside a function definition and should ignore
+            # nested functions so we don't want to recurse any further
+            return
+
+        self._inside_function = True
+        self.generic_visit(node)
+
+    visit_FunctionDef = _visit_function
+    visit_AsyncFunctionDef = _visit_function
+
+
+class OnlyNoneReturnsVisitor(ReturnVisitor):
+    """Checks whether a function AST contains only `None` returns."""
+
+    def __init__(self) -> None:
+        """Initializes a visitor instance."""
+        super().__init__()
+        self.has_only_none_returns = True
+
+    def visit_Return(self, node: ast.Return) -> None:
+        """Visit a return statement.
+
+        Args:
+            node: The return statement to visit.
+        """
+        if node.value is not None:
+            if isinstance(node.value, (ast.Constant, ast.NameConstant)):
+                if node.value.value is None:
+                    return
+
+            self.has_only_none_returns = False
+
+
+class TupleReturnVisitor(ReturnVisitor):
+    """Checks whether a function AST contains tuple returns."""
+
+    def __init__(self) -> None:
+        """Initializes a visitor instance."""
+        super().__init__()
+        self.has_tuple_return = False
+
+    def visit_Return(self, node: ast.Return) -> None:
+        """Visit a return statement.
+
+        Args:
+            node: The return statement to visit.
+        """
+        if isinstance(node.value, ast.Tuple) and len(node.value.elts) > 1:
+            self.has_tuple_return = True
+
+
+def has_tuple_return(func: Callable[..., Any]) -> bool:
+    """Checks whether a function returns multiple values.
+
+    Multiple values means that the `return` statement is followed by a tuple
+    (with or without brackets).
+
+    Example:
+    ```python
+    def f1():
+      return 1, 2
+
+    def f2():
+      return (1, 2)
+
+    def f3():
+      var = (1, 2)
+      return var
+
+    has_tuple_return(f1)  # True
+    has_tuple_return(f2)  # True
+    has_tuple_return(f3)  # False
+    ```
+
+    Args:
+        func: The function to check.
+
+    Returns:
+        Whether the function returns multiple values.
+    """
+    source = textwrap.dedent(source_code_utils.get_source_code(func))
+    tree = ast.parse(source)
+
+    visitor = TupleReturnVisitor()
+    visitor.visit(tree)
+
+    return visitor.has_tuple_return
+
+
+def has_only_none_returns(func: Callable[..., Any]) -> bool:
+    """Checks whether a function contains only `None` returns.
+
+    A `None` return could be either an explicit `return None` or an empty
+    `return` statement.
+
+    Example:
+    ```python
+    def f1():
+      return None
+
+    def f2():
+      return
+
+    def f3(condition):
+      if condition:
+        return None
+      else:
+        return 1
+
+    has_only_none_returns(f1)  # True
+    has_only_none_returns(f2)  # True
+    has_only_none_returns(f3)  # False
+    ```
+
+    Args:
+        func: The function to check.
+
+    Returns:
+        Whether the function contains only `None` returns.
+    """
+    source = textwrap.dedent(source_code_utils.get_source_code(func))
+    tree = ast.parse(source)
+
+    visitor = OnlyNoneReturnsVisitor()
+    visitor.visit(tree)
+
+    return visitor.has_only_none_returns

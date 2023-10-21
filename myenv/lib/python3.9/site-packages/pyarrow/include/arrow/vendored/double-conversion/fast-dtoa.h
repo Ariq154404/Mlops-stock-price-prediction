@@ -30,7 +30,6 @@
 
 #include "utils.h"
 
-namespace arrow_vendored {
 namespace double_conversion {
 
 enum FastDtoaMode {
@@ -85,6 +84,5 @@ bool FastDtoa(double d,
               int* decimal_point);
 
 }  // namespace double_conversion
-}  // namespace arrow_vendored
 
 #endif  // DOUBLE_CONVERSION_FAST_DTOA_H_

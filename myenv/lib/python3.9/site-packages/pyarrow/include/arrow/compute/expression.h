@@ -33,7 +33,7 @@
 namespace arrow {
 namespace compute {
 
-/// \defgroup expression-core Expressions to describe data transformations
+/// \defgroup expression-core Expressions to describe transformations in execution plans
 ///
 /// @{
 
@@ -94,11 +94,7 @@ class ARROW_EXPORT Expression {
   bool IsNullLiteral() const;
 
   /// Return true if this expression could evaluate to true. Will return true for any
-  /// unbound or non-boolean Expressions. IsSatisfiable does not (currently) do any
-  /// canonicalization or simplification of the expression, so even Expressions
-  /// which are unsatisfiable may spuriously return `true` here. This function is
-  /// intended for use in predicate pushdown where a filter expression is simplified
-  /// by a guarantee, so it assumes that trying to simplify again would be redundant.
+  /// unbound, non-boolean, or unsimplified Expressions
   bool IsSatisfiable() const;
 
   // XXX someday
@@ -260,7 +256,7 @@ Result<std::shared_ptr<Buffer>> Serialize(const Expression&);
 ARROW_EXPORT
 Result<Expression> Deserialize(std::shared_ptr<Buffer>);
 
-/// \defgroup expression-convenience Helpers for convenient expression creation
+/// \defgroup expression-convenience Functions convenient expression creation
 ///
 /// @{
 

@@ -3,6 +3,8 @@ import plotly.express as px
 import streamlit as st
 import mysql.connector
 import time
+import requests
+import json
 
 # Streamlit configuration
 st.set_page_config(
@@ -31,20 +33,50 @@ def get_data():
     df = pd.read_sql(query, conn)
     conn.close()
     return df
+def get_forecast(interval):
+    url = "http://localhost:5001/forecast"
+    payload = {
+        "interval": interval
+    }
+    response = requests.post(url, json=payload)
+    if response.status_code == 200:
+        forecast_data = json.loads(response.text)
+        if isinstance(forecast_data, str):
+            forecast_data = json.loads(forecast_data)
+        return forecast_data
+    else:
+        print(f"Error {response.status_code}: {response.text}")
+        return None
+
+def convert_to_dataframe(forecast_data):
+    # Convert timestamps to datetime format
+    for data_point in forecast_data:
+        print(type(data_point))
+        data_point["ds"] = pd.to_datetime(int(data_point["ds"]), unit='ms')
+        
+    # Convert the list to a DataFrame
+    df = pd.DataFrame(forecast_data)
+
+    return df
 
 # App title
 st.title("Live Stock Prices Dashboard")
-
+interval = "5T"  # adjust as needed
 # Set up placeholders for dynamically updating content
 kpi_placeholder = st.empty()
 chart_placeholder1 = st.empty()
 chart_placeholder2 = st.empty()
 data_placeholder = st.empty()
+forecast_placeholder = st.empty()
 
+forecast_data = get_forecast(interval)
+print("forecast_data",forecast_data)
+forecast_df = None
+if forecast_data:
+    forecast_df = convert_to_dataframe(forecast_data)
 while True:
     # Fetch data
     df = get_data()
-
     # Calculate KPIs
     avg_price = df["stock_price"].mean()
     last_price = df["stock_price"].iloc[0]
@@ -75,6 +107,10 @@ while True:
     with chart_placeholder1.container():
         st.markdown("### Stock Price Over Time")
         fig = px.line(df, x='stock_date', y='stock_price', title='Stock Price Trend')
+        if forecast_df is not None and forecast_data is not None:
+            print(forecast_df)
+            print(forecast_df.info())
+            fig.add_scatter(x=forecast_df["ds"], y=forecast_df["yhat"], mode='lines', name='Forecast', line=dict(color='red'))
         st.write(fig)
 
     with chart_placeholder2.container():
