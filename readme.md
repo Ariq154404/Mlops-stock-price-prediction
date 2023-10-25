@@ -100,13 +100,13 @@ Install the dependencies
 Go to the data engineeing folder 
 
 ```bash
-  cd data-engineeing
+  cd data-engineering
 ```
 
 Run docker compose to start mysql and rabbit mq and go back to the main directory
 
 ```bash
-  python3 filter_info.py
+  docker-compose up -d
   cd ..
 ```
 
@@ -135,6 +135,7 @@ pyhon run_CTCD_pipeline.py
 Prop The  Mlflow display if you want
 
 ```bash
+source temp_set_env.sh
 mlflow ui --backend-store-uri $MLFLOW_TRACKING_URI
 ```
 Go to zenml dashboard and see pipelines
