@@ -6,7 +6,7 @@ from zenml.client import Client
 from zenml.services import BaseService
 class ProphetPredictor:
 
-    def __init__(self, endpoint_url=None):
+    def __init__(self,mindate=None):
         client = Client()
         model_deployer = client.active_stack.model_deployer
         services = model_deployer.find_model_server(
@@ -14,7 +14,8 @@ class ProphetPredictor:
         running=True,
         )
         self.endpoint_url =  str(services[0].endpoint.prediction_url)
-      
+        self.start_date=mindate
+        print("STTTTTTARRRRRTDAAAATEE",self.start_date,type(self.start_date))
 
     @staticmethod
     def freq_to_timedelta(freq: str) -> timedelta:
@@ -36,7 +37,8 @@ class ProphetPredictor:
         freq = future_params["freq"]
         delay = self.freq_to_timedelta(freq)
         
-        last_date = datetime.now()  - timedelta(days=1) # or any starting point you desire
+        #last_date = datetime.now()  - timedelta(days=1) # or any starting point you desire
+        last_date=self.start_date
         future_dates = [(last_date + i * delay).strftime('%Y-%m-%d %H:%M:%S') for i in range(periods)]
         future_df = pd.DataFrame({'ds': future_dates})
         

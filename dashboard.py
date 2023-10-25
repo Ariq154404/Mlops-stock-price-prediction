@@ -32,16 +32,39 @@ def get_data():
         password=MYSQL_PASSWORD,
         database=MYSQL_DATABASE
     )
-    query =  query = """
-    SELECT * FROM stock_table 
-    WHERE stock_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+    query = """
+     SELECT * FROM stock_table 
     ORDER BY stock_date DESC
+    LIMIT 50
     """
     df = pd.read_sql(query, conn)
     conn.close()
     return df
-def get_forecast(interval,freq):
-    predictor = ProphetPredictor()
+def get_min_date_from_latest():
+    conn = mysql.connector.connect(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DATABASE
+    )
+    query = """
+    SELECT MIN(stock_date) as min_date 
+    FROM (
+        SELECT stock_date 
+        FROM stock_table 
+        ORDER BY stock_date DESC 
+        LIMIT 50
+    ) AS subquery
+    """
+    df = pd.read_sql(query, conn)
+    conn.close()
+    
+    # Convert the result to Python's datetime format
+    min_date = df['min_date'].iloc[0].to_pydatetime()
+    return min_date
+def get_forecast(interval,freq,mindate):
+    predictor = ProphetPredictor(mindate)
     future_params = {'periods': interval, 'freq': freq}
     predictions_df = predictor.send_prediction(future_params)
     return predictions_df
@@ -86,8 +109,9 @@ forecast_placeholder = st.empty()
 #     forecast_df = convert_to_dataframe(forecast_data)
 while True:
     # Fetch data
-    forecast_df = get_forecast(200,"5T")
     df = get_data()
+    min_date=get_min_date_from_latest()
+    forecast_df = get_forecast(100,"5T",min_date)
     print("DDDDFFFFhead",df.head())
     print("DDDDFFFFtail",df.tail())
     print("DFFFFFLENGTH",df.shape[0])

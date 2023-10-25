@@ -25,7 +25,7 @@ class IngestData:
             password=self.password,
             database=self.database
         )
-        query = "SELECT * FROM stock_table ORDER BY stock_date"
+        query = "SELECT * FROM stock_table ORDER BY stock_date DESC LIMIT 100"
         df = pd.read_sql(query, conn)
         conn.close()
         return df

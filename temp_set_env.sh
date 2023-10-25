@@ -1,0 +1,1 @@
+export MLFLOW_TRACKING_URI='file:/Users/ariqrahman/Library/Application Support/zenml/local_stores/c5c46e6d-2b8b-45b2-a922-69f62de537c9/mlruns'
