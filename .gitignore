@@ -1,2 +1,4 @@
-./myenv/*
-./steps/prohet_model.joblib
+/myenv/*
+/mlruns/*
+/pipelines/mlruns/*
+/docker_flask/deployment/prophet_model.joblib

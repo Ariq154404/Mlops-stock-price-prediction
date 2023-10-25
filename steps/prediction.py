@@ -36,7 +36,7 @@ class ProphetPredictor:
         freq = future_params["freq"]
         delay = self.freq_to_timedelta(freq)
         
-        last_date = datetime.now()  - timedelta(days=8) # or any starting point you desire
+        last_date = datetime.now()  - timedelta(days=1) # or any starting point you desire
         future_dates = [(last_date + i * delay).strftime('%Y-%m-%d %H:%M:%S') for i in range(periods)]
         future_df = pd.DataFrame({'ds': future_dates})
         

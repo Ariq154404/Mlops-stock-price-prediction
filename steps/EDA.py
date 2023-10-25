@@ -7,6 +7,8 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import os
 import sys
+import mlflow
+from zenml import step
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from steps.ingest import ingest_data
 class TimeSeriesEDA:
@@ -16,7 +18,12 @@ class TimeSeriesEDA:
         self.value_col = value_col
         self.series = df.set_index(date_col)[value_col]
         print(self.series)
-
+    def save_and_log_plot(self, plt, filename):
+        
+        """Save the plot and log it to MLflow"""
+        plt.savefig(filename)
+        mlflow.log_artifact(filename)
+        
     def plot_series(self):
         plt.figure(figsize=(10, 6))
         plt.plot(self.series)
@@ -25,7 +32,7 @@ class TimeSeriesEDA:
         plt.ylabel(self.value_col)
         plt.xticks(self.series.index[::len(self.series)//10], rotation=45)
         plt.tight_layout()
-
+        self.save_and_log_plot(plt, "time_series_plot.png")
         st.pyplot(plt)
         
     def decomposition(self):
@@ -53,6 +60,7 @@ class TimeSeriesEDA:
         ax4.set_xticklabels(result.observed.index[::len(self.series)//5], rotation=45)  # Rotate x-tick labels for better visibility
     
         plt.tight_layout()
+        self.save_and_log_plot(plt, "decomposition_plot.png")
         st.pyplot(plt)
 
     def stationarity_test(self):
@@ -65,7 +73,9 @@ class TimeSeriesEDA:
         fig, ax = plt.subplots(1, 2, figsize=(12, 4))
         plot_acf(self.series, ax=ax[0])
         plot_pacf(self.series, ax=ax[1])
+        self.save_and_log_plot(plt, "acf_pacf_plot.png")
         st.pyplot(plt)
+        
 
     def run_all(self):
         self.plot_series()
@@ -73,14 +83,14 @@ class TimeSeriesEDA:
         self.stationarity_test()
         self.plot_acf_pacf()
 
-
+@step(experiment_tracker="mlflow")
 def EDA(df : pd.DataFrame, date_col : str, value_col: str) -> None:
     st.title("Time Series EDA Dashboard")
         
     ts_eda = TimeSeriesEDA(df, date_col, value_col)
     ts_eda.run_all()
 
-if __name__ == "__main__":
-    df=ingest_data("localhost", "root", 3307, "my-secret-pw", "stocks")
-    print(df.head())
-    EDA(df,'stock_date','stock_price')
+# if __name__ == "__main__":
+#     df=ingest_data("localhost", "root", 3307, "my-secret-pw", "stocks")
+#     print(df.head())
+#     EDA(df,'stock_date','stock_price')

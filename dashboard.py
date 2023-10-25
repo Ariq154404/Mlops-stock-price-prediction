@@ -32,7 +32,11 @@ def get_data():
         password=MYSQL_PASSWORD,
         database=MYSQL_DATABASE
     )
-    query = "SELECT * FROM stock_table ORDER BY stock_date DESC"
+    query =  query = """
+    SELECT * FROM stock_table 
+    WHERE stock_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+    ORDER BY stock_date DESC
+    """
     df = pd.read_sql(query, conn)
     conn.close()
     return df
@@ -84,6 +88,9 @@ while True:
     # Fetch data
     forecast_df = get_forecast(200,"5T")
     df = get_data()
+    print("DDDDFFFFhead",df.head())
+    print("DDDDFFFFtail",df.tail())
+    print("DFFFFFLENGTH",df.shape[0])
     # Calculate KPIs
     avg_price = df["stock_price"].mean()
     last_price = df["stock_price"].iloc[0]

@@ -51,6 +51,17 @@ class TrainModel:
         
     def train(self, df):
         df = df.rename(columns={'stock_date': 'ds', 'stock_price': 'y'})
+        # Ensure the dataframe has regular intervals
+    #     df.set_index('ds', inplace=True)
+    #     all_dates = pd.date_range(start=df.index.min(), end=df.index.max(), freq='5min')
+    #     df = df.reindex(all_dates)
+    #     df.index.name = 'ds'
+    
+    # # Fill missing values with average of neighbors
+    #     df['y'] = (df['y'].ffill() + df['y'].bfill()) / 2
+    #     df['y'].fillna(method='ffill', inplace=True)
+    #     df['y'].fillna(method='bfill', inplace=True)
+    #     df.reset_index(inplace=True)
         train_size = int(self.train_ratio * len(df))
         train_df = df[:train_size]
         test_df = df[train_size:]
@@ -67,7 +78,7 @@ def train_model(df : pd.DataFrame) -> Tuple[Annotated[Prophet, "prophet_model"],
     try:
         trainer = TrainModel()
         model, test_df, forecasted_values = trainer.train(df)
-        mlflow.prophet.log_model(model, artifact_path="prophet_model4")
+        mlflow.prophet.log_model(model, artifact_path="prophet_model5")
         #mlflow.pyfunc.log_model("prophet_model", python_model=model)
         return model, test_df, forecasted_values
     except Exception as e:
